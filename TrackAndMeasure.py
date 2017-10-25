@@ -42,10 +42,10 @@ def run():
 
 		imageTitle = WindowManager.getImage(FOV).getTitle()
 		newDir = imageTitle + ' ROIs'
-		print("imageTitle = "+imageTitle)
-		print("newDir = "+newDir)
+		#print("imageTitle = "+imageTitle)
+		#print("newDir = "+newDir)
 		dirPath = os.path.join(dstDir, newDir)
-		print("dirPath = "+dirPath)
+		#print("dirPath = "+dirPath)
 		if not os.path.exists(dirPath):
 			try:
 				os.makedirs(dirPath)		
@@ -58,7 +58,9 @@ def run():
 			iterateCoords(TMdata, nFrames, dirPath, imp2)
 		imp2.changes = 0
 		imp2.close()
-
+	relabel()
+	resultsDir = os.path.splitext(srcDir)[0]+".csv"
+	IJ.saveAs("Results", resultsDir)
 
 def runTrackMate(imp):
 	import fiji.plugin.trackmate.Settings as Settings
@@ -327,6 +329,32 @@ def measureChannels(ROIset, imp, frameNumber):
 		channel.setSlice(frameNumber+1)
 		IJ.setAutoThreshold(channel, "Huang dark")
 		rm.runCommand(channel,"Measure")
+		
+def relabel():
+	from ij.measure import ResultsTable
+	rt = ResultsTable.getResultsTable()
+	nResults = rt.size()
+	for result in range(nResults):
+		oldLabel = rt.getLabel(result)
+		delimiters = []
+		keywords = ["series", "Cell"]
+		for keyword in keywords:
+			if keyword in oldLabel:
+				delimiters.append(oldLabel.index(keyword))
+		
+		channel = oldLabel[0:2]
+		try:
+			series = "FOV"+oldLabel[(delimiters[0]+7):(delimiters[0]+9)]
+		except IndexError:	
+			series = "Series ?"
+		try:
+			cell = oldLabel[delimiters[1]:(delimiters[1]+5)]
+		except IndexError:
+			cell = "Cell ?"		
+		newLabel = channel+"_"+series+"_"+cell
+		rt.setLabel(newLabel, result)
+		rt.show("Results")
+
 run()
 
 
