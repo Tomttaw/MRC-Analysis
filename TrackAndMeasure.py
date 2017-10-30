@@ -288,17 +288,12 @@ def adjustRoiAndMeasure(imp, frameNumber, dstDir):
 			rm.runCommand(imp, "Delete")
 			
 	elif nROIs == 1:
-		new_nROI = nROIs+1
+		new_nROI = nROIs
+		rm.setSelectedIndexes([new_nROI])
+		rm.runCommand("Rename", "Cell0")
+		
 	else:
 		return
-
-	newDir = dstDir + ' ROIs'
-	if not os.path.exists(newDir):
-		try:
-			os.makedirs(newDir)		
-		except OSError as e:
-				if e.errno != errno.EEXIST:
-					raise
 							
 	adjustedROIs = range(nROIs, new_nROI,1)
 	rm.setSelectedIndexes(adjustedROIs)
@@ -331,13 +326,14 @@ def measureChannels(ROIset, imp, frameNumber):
 		rm.runCommand(channel,"Measure")
 		
 def relabel():
+	import re 
 	from ij.measure import ResultsTable
 	rt = ResultsTable.getResultsTable()
 	nResults = rt.size()
 	for result in range(nResults):
 		oldLabel = rt.getLabel(result)
 		delimiters = []
-		keywords = ["series", "Cell"]
+		keywords = ["series"]
 		for keyword in keywords:
 			if keyword in oldLabel:
 				delimiters.append(oldLabel.index(keyword))
@@ -347,14 +343,14 @@ def relabel():
 			series = "FOV"+oldLabel[(delimiters[0]+7):(delimiters[0]+9)]
 		except IndexError:	
 			series = "Series ?"
-		try:
-			cell = oldLabel[delimiters[1]:(delimiters[1]+5)]
-		except IndexError:
-			cell = "Cell ?"		
+
+		foundColons = [m.start() for m in re.finditer(':', oldLabel)]
+		cell = oldLabel[foundColons[0]+1:foundColons[1]]
+		
 		newLabel = channel+"_"+series+"_"+cell
 		rt.setLabel(newLabel, result)
-		rt.show("Results")
-
+	rt.show("Results")
+relabel()	
 run()
 
 
