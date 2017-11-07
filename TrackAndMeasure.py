@@ -9,8 +9,9 @@ from ij.plugin import ChannelSplitter
 
 def run():
 
-	# ensure no other windows are open
+	# ensure no other windows are open and clear resultstable
 	IJ.run("Close All")
+	IJ.run("Clear Results", "")
 	#Ask user for file to be converted
 	srcDir=IJ.getFilePath("Select file to analyse")
 	if not srcDir:
@@ -20,14 +21,14 @@ def run():
 	IJ.open(srcDir)
 	dstDir = os.path.dirname(srcDir)
 	print("dstDir = "+dstDir)
-	#open ROI manager and save ROI names as labels in measurements
+	#open ROI manager, save ROI names as labels in measurements
 	rm = RoiManager.getInstance()
 	if not rm:
 		rm = RoiManager()
 	rm.runCommand("UseNames", "true")
 
 	# set parameters to be measured
-	IJ.run("Set Measurements...", "area mean integrated stack limit display redirect=None decimal=3")
+	IJ.run("Set Measurements...", "area mean integrated limit display redirect=None decimal=3")
 
 	FOVlist = WindowManager.getIDList()
 	chnls = IJ.getString("Please enter which channels you would like to analyse. Example: 123 analyses channels 1, 2 and 3", '123')
@@ -37,30 +38,33 @@ def run():
 		IJ.run(imp, "Arrange Channels...", "new="+chnls)
 		imp.close()
 		imp2 = WindowManager.getCurrentImage()
-		#run simple background correction
-		IJ.run(imp2, "Subtract Background...", "rolling=100 stack")
 
 		imageTitle = WindowManager.getImage(FOV).getTitle()
 		newDir = imageTitle + ' ROIs'
-		#print("imageTitle = "+imageTitle)
-		#print("newDir = "+newDir)
+
 		dirPath = os.path.join(dstDir, newDir)
-		#print("dirPath = "+dirPath)
+
 		if not os.path.exists(dirPath):
 			try:
 				os.makedirs(dirPath)		
 			except OSError as e:
 					if e.errno != errno.EEXIST:
 						raise
-						
+		# clear ROI list before analysis
+		rm.runCommand(imp2,"Deselect")
+		rm.runCommand(imp2,"Delete")
+
 		TMdata, nFrames = runTrackMate(imp2)
 		if TMdata:
 			iterateCoords(TMdata, nFrames, dirPath, imp2)
 		imp2.changes = 0
 		imp2.close()
-	relabel()
+	#relabel()
 	resultsDir = os.path.splitext(srcDir)[0]+".csv"
+	#while os.path.exists(resultsDir):
+		#resultsDir = resultsDir+"_1"+".csv"
 	IJ.saveAs("Results", resultsDir)
+	
 
 def runTrackMate(imp):
 	import fiji.plugin.trackmate.Settings as Settings
@@ -221,7 +225,6 @@ def runTrackMate(imp):
 	        spot_track[t] = (x, y)
 	    crds_perSpot.append(spot_track)
 	    #print ("Spot", crds_perSpot.index(spot_track),"has the following coordinates:", crds_perSpot[crds_perSpot.index(spot_track)])
-	#IJ.run("Remove Overlay", "")
 	return (crds_perSpot, nFrames)   
 
 def createROI(xy_coord, diameter):
@@ -297,7 +300,7 @@ def adjustRoiAndMeasure(imp, frameNumber, dstDir):
 							
 	adjustedROIs = range(nROIs, new_nROI,1)
 	rm.setSelectedIndexes(adjustedROIs)
-	measureChannels(adjustedROIs, imp, frameNumber)
+	measureChannels(adjustedROIs, imp, frameNumber) 
 	rm.runCommand("Save selected", dstDir+"\\Frame "+str(frameNumber+1)+" roi set.zip")
 	rm.runCommand(imp,"Deselect")
 	rm.runCommand(imp,"Delete")
@@ -309,21 +312,39 @@ def iterateCoords(spotsData, n_Frames, path, imp):
 		for index, spotData in enumerate(spotsData):
 			p = spotData.get(i)
 			if p:
-				#print "Spot", index, "x, y location", p, "in frame", i+1
 				createROI(p, 40)
 		adjustRoiAndMeasure(imp, i, path)
+
+def extractChannel(imp, nChannel, nFrame):
+	""" Extract a stack for a specific color channel and time frame """
+	imageTitle = imp.getTitle()
+	delimiters = []
+	if 'series' in imageTitle:
+				delimiters.append(imageTitle.index('series'))
+	try:
+		series = "FOV"+imageTitle[(delimiters[0]+7):(delimiters[0]+9)]
+	except IndexError:	
+		series = "Series ?"
+		
+	stack = imp.getImageStack()
+	ch = ImageStack(imp.width, imp.height)
+	index = imp.getStackIndex(nChannel, 1, nFrame)
+	ch.addSlice(str(1), stack.getProcessor(index))
+	return ImagePlus(series+":Frame" + str(nFrame+1)+":C" + str(nChannel), ch)
 
 def measureChannels(ROIset, imp, frameNumber):
 	rm = RoiManager.getInstance()
 	if not rm:
 		rm = RoiManager()
-	rm.setSelectedIndexes(ROIset)
-	channels = ChannelSplitter.split(imp)
-
-	for channel in channels:	
-		channel.setSlice(frameNumber+1)
-		IJ.setAutoThreshold(channel, "Huang dark")
-		rm.runCommand(channel,"Measure")
+	nChannels = imp.getNChannels()
+	for channel in range(nChannels):
+		target_imp = extractChannel(imp, channel+1, frameNumber)
+		target_imp.show()
+		for roi in ROIset:
+			rm.setSelectedIndexes([roi])
+			IJ.setAutoThreshold(target_imp, "Huang dark")
+			rm.runCommand(target_imp, "Measure")
+		target_imp.close()
 		
 def relabel():
 	import re 
@@ -342,7 +363,7 @@ def relabel():
 		try:
 			series = "FOV"+oldLabel[(delimiters[0]+7):(delimiters[0]+9)]
 		except IndexError:	
-			series = "Series ?"
+			series = "FOV?"
 
 		foundColons = [m.start() for m in re.finditer(':', oldLabel)]
 		cell = oldLabel[foundColons[0]+1:foundColons[1]]
@@ -350,9 +371,8 @@ def relabel():
 		newLabel = channel+"_"+series+"_"+cell
 		rt.setLabel(newLabel, result)
 	rt.show("Results")
-relabel()	
-run()
 
+run()
 
 
 
