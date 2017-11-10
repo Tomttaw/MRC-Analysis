@@ -291,7 +291,8 @@ def adjustRoiAndMeasure(imp, frameNumber, dstDir):
 			rm.runCommand(imp, "Delete")
 			
 	elif nROIs == 1:
-		new_nROI = nROIs
+		nROIs = 0
+		new_nROI = 1
 		rm.setSelectedIndexes([new_nROI])
 		rm.runCommand("Rename", "Cell0")
 		
@@ -300,7 +301,8 @@ def adjustRoiAndMeasure(imp, frameNumber, dstDir):
 							
 	adjustedROIs = range(nROIs, new_nROI,1)
 	rm.setSelectedIndexes(adjustedROIs)
-	measureChannels(adjustedROIs, imp, frameNumber) 
+	measureChannels(adjustedROIs, imp, frameNumber)
+	rm.setSelectedIndexes(adjustedROIs)
 	rm.runCommand("Save selected", dstDir+"\\Frame "+str(frameNumber+1)+" roi set.zip")
 	rm.runCommand(imp,"Deselect")
 	rm.runCommand(imp,"Delete")
@@ -373,6 +375,7 @@ def relabel():
 	rt.show("Results")
 
 run()
+
 
 
 
